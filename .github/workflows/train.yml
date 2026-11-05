@@ -1,0 +1,48 @@
+name: train
+# 週1回: 不足データを取得してモデルを学習し直し、models/ をコミットする
+on:
+  schedule:
+    - cron: "0 18 * * 0"    # 月曜 03:00 JST
+  workflow_dispatch:
+    inputs:
+      odds_days:
+        description: 締切時オッズを遡って集める日数
+        default: "120"
+permissions:
+  contents: write
+concurrency:
+  group: train
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements.txt
+      - uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: data-${{ github.run_id }}
+          restore-keys: data-
+      - name: 過去データの取得(取得済みはスキップ)
+        run: |
+          Y=$(TZ=Asia/Tokyo date -d yesterday +%F)
+          O=$(TZ=Asia/Tokyo date -d "${{ inputs.odds_days || '120' }} days ago" +%F)
+          python -m boatpred.download 2022-01-01 "$Y" KB 8 | grep -v " ok$" | tail -20
+          python scripts/collect_odds.py "$O" "$Y" 6 | grep -v done | tail -20
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data
+          key: data-${{ github.run_id }}
+      - run: python scripts/train.py | tee train.log
+      - run: mkdir -p reports && python scripts/backtest.py $(python -c "import json;p=json.load(open('models/params.json'));import datetime as d;o=d.date.fromisoformat(p['odds_period'][0]);e=d.date.fromisoformat(p['odds_period'][1]);print(o-d.timedelta(days=60),o,o+(e-o)/2)") | tee reports/backtest.log
+      - name: モデルをコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add models reports
+          git commit -m "retrain model" || exit 0
+          git push

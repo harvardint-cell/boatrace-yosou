@@ -1,0 +1,7 @@
+pandas>=2.2
+numpy
+scipy
+requests
+lhafile
+lightgbm>=4
+scikit-learn

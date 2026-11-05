@@ -1,0 +1,38 @@
+name: live
+# レース開催中に回し続け、締切約7分前のレースから順に確定予想を出す
+on:
+  schedule:
+    - cron: "20 23 * * *"   # 08:20 JST
+    - cron: "10 5 * * *"    # 14:10 JST
+    - cron: "0 11 * * *"    # 20:00 JST
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: live
+  cancel-in-progress: false
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements.txt
+      - uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: data-${{ github.run_id }}
+          restore-keys: data-
+      - name: これまでの予想を復元
+        run: |
+          mkdir -p site/data
+          if git fetch -q origin gh-pages; then git archive origin/gh-pages data | tar -x -C site; fi
+      - run: python scripts/run_live.py 340
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data
+          key: data-${{ github.run_id }}

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>競艇 期待値予想</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#16191d;--sub:#5d6670;--line:#e3e6ea;--acc:#0b63ce;--hit:#0a7d3b;--warn:#a15c00}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111417;--card:#1a1e23;--ink:#e8ebee;--sub:#9aa4ae;--line:#2b3139;--acc:#5aa2ff;--hit:#3ccf7a;--warn:#f0a640}}
+:root[data-theme="dark"]{--bg:#111417;--card:#1a1e23;--ink:#e8ebee;--sub:#9aa4ae;--line:#2b3139;--acc:#5aa2ff;--hit:#3ccf7a;--warn:#f0a640}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif}
+main{max-width:860px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:4px 0 2px}.sub{color:var(--sub);font-size:13px}
+.note{border-left:3px solid var(--warn);padding:8px 10px;background:var(--card);margin:12px 0;font-size:13px;color:var(--sub)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
+select,label{font-size:14px}select{padding:6px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:12px 0}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px}.kpi b{display:block;font-size:20px}
+.race{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0}
+.race h2{font-size:15px;margin:0;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.tag{font-size:12px;padding:1px 6px;border-radius:4px;border:1px solid var(--line);color:var(--sub)}
+.tag.fix{border-color:var(--acc);color:var(--acc)}
+table{width:100%;border-collapse:collapse;margin-top:6px;font-size:13px}td,th{padding:3px 4px;border-bottom:1px solid var(--line);text-align:left}
+th{color:var(--sub);font-weight:500}.num{text-align:right;font-variant-numeric:tabular-nums}
+.hit{color:var(--hit);font-weight:700}.none{color:var(--sub);font-size:13px;margin-top:4px}
+details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:4px}
+</style>
+</head>
+<body>
+<main>
+<h1>競艇 期待値予想</h1>
+<div class="sub" id="upd">読み込み中…</div>
+<div class="note">期待値 = 推定確率 × 締切数分前のオッズ。買い目の基準は過去データの検証で決めていますが、<b>回収率100%超えはまだ実証できていません</b>。下の「仮想収支」は、実際に買わずに記録した成績です。実際に賭ける判断の前に、この数字が十分に貯まるのを待ってください。</div>
+<div class="bar">
+  <select id="day"></select>
+  <label><input type="checkbox" id="onlybet" checked> 買い目ありのみ</label>
+</div>
+<div class="kpis" id="kpis"></div>
+<div id="list"></div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const yen=n=>n==null?'-':n.toLocaleString('ja-JP')+'円';
+async function j(u){const r=await fetch(u+'?t='+Date.now());if(!r.ok)throw new Error(u);return r.json()}
+async function init(){
+  let idx;try{idx=await j('data/index.json')}catch(e){$('#upd').textContent='データがまだありません';return}
+  const days=idx.days.slice().reverse();
+  $('#day').innerHTML=days.map(d=>`<option value="${d}">${d.slice(0,4)}/${d.slice(4,6)}/${d.slice(6)}</option>`).join('');
+  $('#day').onchange=load;$('#onlybet').onchange=load;
+  await load();
+  totals(days);
+}
+async function totals(days){
+  let inv=0,pay=0,n=0;
+  for(const d of days){try{const s=await j(`data/${d}.json`);if(s.settled){inv+=s.settled.invest;pay+=s.settled.payout;n++}}catch(e){}}
+  $('#kpis').insertAdjacentHTML('beforeend',`<div class="kpi">仮想収支 累計(${n}日)<b>${inv?(pay/inv*100).toFixed(1)+'%':'-'}</b><span class="sub">${yen(pay-inv)}</span></div>`);
+}
+async function load(){
+  const d=$('#day').value;const s=await j(`data/${d}.json`);
+  $('#upd').textContent='更新 '+(s.updated||'');
+  const races=Object.values(s.races).sort((a,b)=>(a.deadline||'').localeCompare(b.deadline||''));
+  const nb=races.reduce((a,r)=>a+(r.bets||[]).length,0);
+  const st=s.settled;
+  $('#kpis').innerHTML=`<div class="kpi">レース<b>${races.length}</b></div><div class="kpi">買い目<b>${nb}点</b></div>`+
+   (st?`<div class="kpi">この日の仮想回収率<b>${st.roi!=null?(st.roi*100).toFixed(1)+'%':'-'}</b><span class="sub">${yen(st.payout-st.invest)}</span></div>`:'');
+  const only=$('#onlybet').checked;
+  $('#list').innerHTML=races.filter(r=>!only||(r.bets||[]).length).map(r=>{
+    const res=r.result?`<span class="tag">結果 ${r.result.combo} ${yen(r.result.payout)}</span>`:'';
+    const bets=(r.bets||[]).length?`<table><tr><th>買い目</th><th class="num">推定確率</th><th class="num">オッズ</th><th class="num">期待値</th></tr>`+
+      r.bets.map(b=>`<tr class="${b.hit?'hit':''}"><td>${b.combo}${b.hit?' 的中':''}</td><td class="num">${(b.p*100).toFixed(2)}%</td><td class="num">${b.odds}</td><td class="num">${b.ev.toFixed(2)}</td></tr>`).join('')+'</table>'
+      :`<div class="none">${r.stage==='確定'?'期待値の基準を満たす買い目なし（見送り）':'直前情報待ち（締切約7分前に確定）'}</div>`;
+    const boats=`<details><summary>各艇の1着確率</summary><table><tr><th>艇</th><th>選手</th><th>級</th><th class="num">展示</th><th class="num">進入</th><th class="num">1着率</th></tr>`+
+      r.boats.map(b=>`<tr><td>${b.lane}</td><td>${b.name}</td><td>${b.cls}</td><td class="num">${b.exhibit??'-'}</td><td class="num">${b.course}</td><td class="num">${(b.p_win*100).toFixed(1)}%</td></tr>`).join('')+'</table></details>';
+    return `<div class="race"><h2><span>${r.venue} ${r.rno}R <span class="sub">${r.race_name||''}</span></span><span><span class="tag ${r.stage==='確定'?'fix':''}">${r.stage} ${r.at}</span> <span class="tag">締切 ${r.deadline||'-'}</span> ${res}</span></h2>${bets}${boats}</div>`;
+  }).join('')||'<div class="none">該当なし</div>';
+}
+init();
+</script>
+</body>
+</html>

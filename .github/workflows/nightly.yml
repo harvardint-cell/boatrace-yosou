@@ -1,0 +1,35 @@
+name: nightly
+# 前日の成績・締切時オッズを取得し、仮想収支を確定する
+on:
+  schedule:
+    - cron: "30 16 * * *"   # 01:30 JST
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: nightly
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements.txt
+      - uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: data-${{ github.run_id }}
+          restore-keys: data-
+      - name: これまでの予想を復元
+        run: |
+          mkdir -p site/data
+          if git fetch -q origin gh-pages; then git archive origin/gh-pages data | tar -x -C site; fi
+      - run: python scripts/nightly.py
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data
+          key: data-${{ github.run_id }}
