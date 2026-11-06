@@ -46,11 +46,13 @@ jobs:
           key: data-${{ github.run_id }}
       - run: python scripts/train.py | tee train.log
         if: always()
-      - run: mkdir -p reports && python scripts/backtest.py $(python -c "import json;p=json.load(open('models/params.json'));import datetime as d;o=d.date.fromisoformat(p['odds_period'][0]);e=d.date.fromisoformat(p['odds_period'][1]);print(o-d.timedelta(days=60),o,o+(e-o)/2)") | tee reports/backtest.log
+      - if: false  # train.py が同じ検証を出力するので当面無効
+        run: mkdir -p reports && python scripts/backtest.py $(python -c "import json;p=json.load(open('models/params.json'));import datetime as d;o=d.date.fromisoformat(p['odds_period'][0]);e=d.date.fromisoformat(p['odds_period'][1]);print(o-d.timedelta(days=60),o,o+(e-o)/2)") | tee reports/backtest.log
       - name: モデルをコミット
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p reports && cp train.log reports/train.log
           git add models reports
           git commit -m "retrain model" || exit 0
           git push
