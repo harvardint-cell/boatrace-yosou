@@ -30,13 +30,21 @@ def one(args):
     return [dict(date=d, jcd=jcd, rno=rno, combo=k, odds=v) for k, v in o.items() if k != "_time"]
 
 
-def main(start, end, workers=6):
+def main(start, end, workers=6, *flags):
+    from boatpred.download import fetch
     OUT.mkdir(parents=True, exist_ok=True)
-    for d in daterange(dt.date.fromisoformat(start), dt.date.fromisoformat(end)):
+    days = list(daterange(dt.date.fromisoformat(start), dt.date.fromisoformat(end)))
+    if "--newest-first" in flags:
+        days.reverse()
+    for d in days:
         out = OUT / f"{d:%Y%m%d}.csv"
-        kp = path_for("K", d)
-        if out.exists() or not kp.exists():
+        if out.exists():
             continue
+        kp = path_for("K", d)
+        if not kp.exists():
+            kp = fetch("K", d)  # レース一覧に成績ファイルが必要
+            if not kp:
+                continue
         _, races, _ = parse_k(kp)
         jobs = [(d, r.jcd, r.rno) for r in races.itertuples()]
         with ThreadPoolExecutor(int(workers)) as ex:
@@ -46,4 +54,6 @@ def main(start, end, workers=6):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:])
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    flags = [a for a in sys.argv[1:] if a.startswith("--")]
+    main(*args[:2], *(args[2:3] or [6]), *flags)

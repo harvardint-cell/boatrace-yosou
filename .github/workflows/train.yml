@@ -26,18 +26,26 @@ jobs:
           path: data
           key: data-${{ github.run_id }}
           restore-keys: data-
-      - name: 過去データの取得(取得済みはスキップ)
+      - name: 過去データの取得(取得済みはスキップ・時間切れでも次へ進む)
+        timeout-minutes: 290
+        continue-on-error: true
         run: |
           Y=$(TZ=Asia/Tokyo date -d yesterday +%F)
           O=$(TZ=Asia/Tokyo date -d "${{ inputs.odds_days || '120' }} days ago" +%F)
-          python -m boatpred.download 2022-01-01 "$Y" KB 8 | grep -v " ok$" | tail -20
-          python scripts/collect_odds.py "$O" "$Y" 6 | grep -v done | tail -20
+          echo "取得前: K=$(ls data/raw/K 2>/dev/null | wc -l) B=$(ls data/raw/B 2>/dev/null | wc -l) odds=$(ls data/odds 2>/dev/null | wc -l)"
+          # オッズ(バックテストに必須)を先に、新しい日付から集める
+          python scripts/collect_odds.py "$O" "$Y" 6 --newest-first | grep -v " done$" || true
+          python -m boatpred.download 2022-01-01 "$Y" KB 8 | awk '{n++} n%200==0{print n" files", $0} /ERR/' || true
+      - name: 取得状況
+        if: always()
+        run: echo "K=$(ls data/raw/K 2>/dev/null | wc -l) B=$(ls data/raw/B 2>/dev/null | wc -l) odds=$(ls data/odds 2>/dev/null | wc -l)"
       - uses: actions/cache/save@v4
         if: always()
         with:
           path: data
           key: data-${{ github.run_id }}
       - run: python scripts/train.py | tee train.log
+        if: always()
       - run: mkdir -p reports && python scripts/backtest.py $(python -c "import json;p=json.load(open('models/params.json'));import datetime as d;o=d.date.fromisoformat(p['odds_period'][0]);e=d.date.fromisoformat(p['odds_period'][1]);print(o-d.timedelta(days=60),o,o+(e-o)/2)") | tee reports/backtest.log
       - name: モデルをコミット
         run: |
