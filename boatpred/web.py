@@ -104,3 +104,21 @@ def beforeinfo(d: dt.date, jcd: int, rno: int) -> dict:
         weather=wt.group(1) if wt else None,
     )
     return dict(boats=boats, weather=weather)
+
+
+def oddstf(d: dt.date, jcd: int, rno: int) -> dict:
+    """単勝オッズ {艇番: odds}。0.0や欠場など数値として使えないものは含めない。"""
+    h = _get("oddstf", d, jcd, rno)
+    m = re.search(r"単勝オッズ</span>(.*?)複勝オッズ", h, re.S)
+    if not m:
+        return {}
+    vals = re.findall(r'oddsPoint[^>]*>([^<]*)<', m.group(1))
+    out = {}
+    for lane, v in enumerate(vals[:6], start=1):
+        try:
+            f = float(v)
+        except ValueError:
+            continue
+        if f >= 1.0:
+            out[lane] = f
+    return out

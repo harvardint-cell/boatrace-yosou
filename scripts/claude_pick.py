@@ -35,6 +35,8 @@ THR = 1.2
 # 2-3着の残る力を手で与えるHarville計算は、弱い艇の連絡みを過大に見積もりやすい(大穴に期待値が出る)。
 # そのため確率の低い組・高配当の組は買わない
 MIN_P = 0.02
+# 単勝方式(2026-11-06 14:10〜): 私の1着確率 × 単勝オッズ > WIN_THR の艇を買う
+WIN_THR = 1.15
 MAX_ODDS = 100
 
 
@@ -187,8 +189,11 @@ def record(jcd, rno, win, place, memo):
         od = o.get(c)
         if od and p * od > THR and p >= MIN_P and od <= MAX_ODDS:
             bets.append(dict(combo=c, p=round(p, 4), p_claude=round(P[c], 4), odds=od, ev=round(p * od, 2)))
+    tf = web.oddstf(today(), jcd, rno)
+    win_bets = [dict(lane=i + 1, p=round(win[i], 3), odds=tf[i + 1], ev=round(win[i] * tf[i + 1], 2))
+                for i in range(6) if tf.get(i + 1) and win[i] * tf[i + 1] > WIN_THR]
     top = sorted(P.items(), key=lambda x: -x[1])[:8]
-    rec = dict(date=f"{today()}", venue=VENUES.get(jcd), jcd=jcd, rno=rno, made_at=f"{now():%H:%M}",
+    rec = dict(win_bets=win_bets, tf_odds=tf, mode="単勝",date=f"{today()}", venue=VENUES.get(jcd), jcd=jcd, rno=rno, made_at=f"{now():%H:%M}",
                p_win={str(i + 1): round(w, 3) for i, w in enumerate(win)},
                place={str(i + 1): p for i, p in enumerate(place)},
                top=[dict(combo=c, p=round(p, 4), odds=o.get(c)) for c, p in top],
@@ -196,7 +201,7 @@ def record(jcd, rno, win, place, memo):
                odds_all={k: v for k, v in o.items() if k != "_time"})
     PICKS.mkdir(exist_ok=True)
     pick_path(today(), jcd, rno).write_text(json.dumps(rec, ensure_ascii=False, indent=1))
-    print(json.dumps(dict(top=rec["top"][:5], bets=bets), ensure_ascii=False))
+    print(json.dumps(dict(win_bets=win_bets, tf_odds=tf, top=rec["top"][:3]), ensure_ascii=False))
 
 
 def settle():
@@ -218,17 +223,23 @@ def settle():
                 p.write_text(json.dumps(rec, ensure_ascii=False, indent=1))
             continue
         combo = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+        mt = re.search(r"単勝 (\d) &yen;([\d,]+)", t)
+        tansho = (int(mt.group(1)), int(mt.group(2).replace(",", ""))) if mt else (int(m.group(1)), 0)
         pay = int(m.group(4).replace(",", ""))
         P = trifecta([rec["p_win"][str(i)] for i in range(1, 7)], [rec["place"][str(i)] for i in range(1, 7)])
         hit = [b for b in rec["bets"] if b["combo"] == combo]
         oa = rec.get("odds_all") or {}
         tot = sum(1 / v for v in oa.values()) if oa else None
         mp = round(1 / oa[combo] / tot, 4) if oa.get(combo) else None
+        wb = rec.get("win_bets", [])
+        rec["result_win"] = dict(winner=tansho[0], payout=tansho[1], invest=100 * len(wb),
+                                 ret=sum(tansho[1] for b in wb if b["lane"] == tansho[0]))
         rec["result"] = dict(combo=combo, payout=pay, claude_p=round(P[combo], 4), market_p=mp,
                              invest=100 * len(rec["bets"]), ret=pay if hit else 0)
         p.write_text(json.dumps(rec, ensure_ascii=False, indent=1))
-        done.append(f"{rec['venue']}{rec['rno']}R {combo} {pay}円 私の確率{P[combo]*100:.1f}% "
-                    f"買い{len(rec['bets'])}点 {'的中' if hit else ''}")
+        rw = rec["result_win"]
+        done.append(f"{rec['venue']}{rec['rno']}R {combo} {pay}円 私の確率{P[combo]*100:.1f}% | "
+                    f"単勝{tansho[0]}号艇 {tansho[1]}円 単勝買い{len(wb)}点 払戻{rw['ret']}")
     print("\n".join(done) or "新たに確定した結果なし")
 
 
@@ -247,6 +258,11 @@ def summary():
         a = -np.mean([np.log(max(r["result"]["claude_p"], 1e-6)) for r in mk])
         b = -np.mean([np.log(r["result"]["market_p"]) for r in mk])
         print(f"市場との比較({len(mk)}R): 対数損失 Claude {a:.3f} / 市場 {b:.3f} (小さい方が良い)")
+    ws = [r for r in rs if "result_win" in r and r.get("mode") == "単勝"]
+    if ws:
+        i2 = sum(r["result_win"]["invest"] for r in ws)
+        r2 = sum(r["result_win"]["ret"] for r in ws)
+        print(f"単勝方式(本番) {len(ws)}R 投資{i2} 払戻{r2} 回収率{(r2/i2*100 if i2 else float('nan')):.1f}%")
     print(f"確定{len(rs)}R 買ったR{sum(1 for r in rs if r['result']['invest'])} 投資{inv} 払戻{ret} "
           f"回収率{(ret/inv*100 if inv else float('nan')):.1f}% 平均対数損失{nll:.3f}(一様=4.787) 勝者の1着確率平均{win1:.3f}")
 
