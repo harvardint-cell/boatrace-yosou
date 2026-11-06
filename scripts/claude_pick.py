@@ -194,7 +194,7 @@ def record(jcd, rno, win, place, memo):
     # 判断は3連単から逆算した市場の1着確率で行う: 期待値 ≈ 私の1着確率 × 単勝払戻率 ÷ 市場の1着確率
     mw = [sum(v for c, v in mk.items() if c[0] == str(i + 1)) for i in range(6)]
     win_bets = [dict(lane=i + 1, p=round(win[i], 3), p_mkt=round(mw[i], 3), ev=round(win[i] * TANSHO_RATE / mw[i], 2))
-                for i in range(6) if mw[i] > 0 and win[i] * TANSHO_RATE / mw[i] > WIN_THR]
+                for i in range(6) if mw[i] > 0 and win[i] >= 0.10 and win[i] * TANSHO_RATE / mw[i] > WIN_THR]  # 低確率艇の誤差買いを防ぐ
     top = sorted(P.items(), key=lambda x: -x[1])[:8]
     rec = dict(win_bets=win_bets, tf_odds=tf, mode="単勝",date=f"{today()}", venue=VENUES.get(jcd), jcd=jcd, rno=rno, made_at=f"{now():%H:%M}",
                p_win={str(i + 1): round(w, 3) for i, w in enumerate(win)},
