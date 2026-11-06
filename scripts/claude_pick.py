@@ -91,7 +91,7 @@ def program():
     return parse_b(p)
 
 
-def candidates(lo=5, hi=15):
+def candidates(lo=4, hi=11):  # 展示は締切の約10分前までに出ることが多い
     b = program()
     races = b[["jcd", "rno", "deadline", "race_name"]].drop_duplicates(["jcd", "rno"])
     out = []
@@ -237,9 +237,22 @@ if __name__ == "__main__":
         if not c:
             print("対象レースなし(締切5-15分前の未予想レースがない)")
         else:
-            jcd, rno, *_ = random.choice(c)
-            print(f"候補{len(c)}件から選択")
-            brief(jcd, rno)
+            random.shuffle(c)
+            for jcd, rno, *_ in c:
+                h = web._get("odds3t", today(), jcd, rno)
+                if "中止" in h:  # 中止レースは記録して以後選ばない
+                    pick_path(today(), jcd, rno).write_text(json.dumps(
+                        dict(date=f"{today()}", jcd=jcd, rno=rno, void=True, result=dict(void=True))))
+                    print(f"{VENUES.get(jcd)}{rno}R は中止")
+                    continue
+                if h.count("oddsPoint") < 120:
+                    print(f"{VENUES.get(jcd)}{rno}R はオッズ未取得のため次回")
+                    continue
+                print(f"候補{len(c)}件から選択")
+                brief(jcd, rno)
+                break
+            else:
+                print("対象レースなし(直前情報・オッズのそろったレースがない)")
     elif cmd == "brief":
         brief(int(a[0]), int(a[1]))
     elif cmd == "record":
