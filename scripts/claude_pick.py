@@ -155,7 +155,11 @@ def brief(jcd, rno):
     return bi, o
 
 
+PLACE_POW = 2.0  # 手で付ける「残る力」は差が平坦になりがち(弱い艇の2-3着を過大評価)なので差を広げる
+
+
 def trifecta(win, place):
+    place = [x ** PLACE_POW for x in place]
     P = {}
     sp = sum(place)
     for i, j, k in itertools.permutations(range(6), 3):
