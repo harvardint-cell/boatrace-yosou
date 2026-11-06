@@ -180,7 +180,8 @@ def record(jcd, rno, win, place, memo):
                p_win={str(i + 1): round(w, 3) for i, w in enumerate(win)},
                place={str(i + 1): p for i, p in enumerate(place)},
                top=[dict(combo=c, p=round(p, 4), odds=o.get(c)) for c, p in top],
-               bets=bets, memo=memo, result=None)
+               bets=bets, memo=memo, result=None,
+               odds_all={k: v for k, v in o.items() if k != "_time"})
     PICKS.mkdir(exist_ok=True)
     pick_path(today(), jcd, rno).write_text(json.dumps(rec, ensure_ascii=False, indent=1))
     print(json.dumps(dict(top=rec["top"][:5], bets=bets), ensure_ascii=False))
@@ -208,7 +209,10 @@ def settle():
         pay = int(m.group(4).replace(",", ""))
         P = trifecta([rec["p_win"][str(i)] for i in range(1, 7)], [rec["place"][str(i)] for i in range(1, 7)])
         hit = [b for b in rec["bets"] if b["combo"] == combo]
-        rec["result"] = dict(combo=combo, payout=pay, claude_p=round(P[combo], 4),
+        oa = rec.get("odds_all") or {}
+        tot = sum(1 / v for v in oa.values()) if oa else None
+        mp = round(1 / oa[combo] / tot, 4) if oa.get(combo) else None
+        rec["result"] = dict(combo=combo, payout=pay, claude_p=round(P[combo], 4), market_p=mp,
                              invest=100 * len(rec["bets"]), ret=pay if hit else 0)
         p.write_text(json.dumps(rec, ensure_ascii=False, indent=1))
         done.append(f"{rec['venue']}{rec['rno']}R {combo} {pay}円 私の確率{P[combo]*100:.1f}% "
@@ -226,6 +230,11 @@ def summary():
     ret = sum(r["result"]["ret"] for r in rs)
     nll = -np.mean([np.log(max(r["result"]["claude_p"], 1e-6)) for r in rs])
     win1 = np.mean([r["p_win"][r["result"]["combo"][0]] for r in rs])
+    mk = [r for r in rs if r["result"].get("market_p")]
+    if mk:
+        a = -np.mean([np.log(max(r["result"]["claude_p"], 1e-6)) for r in mk])
+        b = -np.mean([np.log(r["result"]["market_p"]) for r in mk])
+        print(f"市場との比較({len(mk)}R): 対数損失 Claude {a:.3f} / 市場 {b:.3f} (小さい方が良い)")
     print(f"確定{len(rs)}R 買ったR{sum(1 for r in rs if r['result']['invest'])} 投資{inv} 払戻{ret} "
           f"回収率{(ret/inv*100 if inv else float('nan')):.1f}% 平均対数損失{nll:.3f}(一様=4.787) 勝者の1着確率平均{win1:.3f}")
 
