@@ -37,6 +37,7 @@ THR = 1.2
 MIN_P = 0.02
 # 単勝方式(2026-11-06 14:10〜): 私の1着確率 × 単勝オッズ > WIN_THR の艇を買う
 WIN_THR = 1.15
+TANSHO_RATE = 0.73  # 単勝の払戻率(締切時オッズ18R分から逆算した平均)
 MAX_ODDS = 100
 
 
@@ -189,9 +190,11 @@ def record(jcd, rno, win, place, memo):
         od = o.get(c)
         if od and p * od > THR and p >= MIN_P and od <= MAX_ODDS:
             bets.append(dict(combo=c, p=round(p, 4), p_claude=round(P[c], 4), odds=od, ev=round(p * od, 2)))
-    tf = web.oddstf(today(), jcd, rno)
-    win_bets = [dict(lane=i + 1, p=round(win[i], 3), odds=tf[i + 1], ev=round(win[i] * tf[i + 1], 2))
-                for i in range(6) if tf.get(i + 1) and win[i] * tf[i + 1] > WIN_THR]
+    tf = web.oddstf(today(), jcd, rno)  # 締切前の単勝オッズは表示が不安定(同じ値や0.0)なので記録のみ
+    # 判断は3連単から逆算した市場の1着確率で行う: 期待値 ≈ 私の1着確率 × 単勝払戻率 ÷ 市場の1着確率
+    mw = [sum(v for c, v in mk.items() if c[0] == str(i + 1)) for i in range(6)]
+    win_bets = [dict(lane=i + 1, p=round(win[i], 3), p_mkt=round(mw[i], 3), ev=round(win[i] * TANSHO_RATE / mw[i], 2))
+                for i in range(6) if mw[i] > 0 and win[i] * TANSHO_RATE / mw[i] > WIN_THR]
     top = sorted(P.items(), key=lambda x: -x[1])[:8]
     rec = dict(win_bets=win_bets, tf_odds=tf, mode="単勝",date=f"{today()}", venue=VENUES.get(jcd), jcd=jcd, rno=rno, made_at=f"{now():%H:%M}",
                p_win={str(i + 1): round(w, 3) for i, w in enumerate(win)},
