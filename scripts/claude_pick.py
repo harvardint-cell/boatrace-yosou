@@ -170,11 +170,19 @@ def record(jcd, rno, win, place, memo):
     win = [x / s for x in win]
     P = trifecta(win, place)
     o = web.odds3t(today(), jcd, rno)
+    # 手で与えた「残る力」によるHarvilleは2-3着の並びの精度が低く、弱い艇の連絡みを市場の2-3倍に見積もる癖が
+    # 出た(6R分の記録)。そこで買い判断は 市場確率とClaude確率の幾何平均(重みW) で行う
+    tot = sum(1 / v for k, v in o.items() if k != "_time")
+    mk = {c: (1 / o[c] / tot if o.get(c) else 0.0) for c in P}
+    W = 0.5
+    bl = {c: (mk[c] ** (1 - W)) * (P[c] ** W) for c in P}
+    z = sum(bl.values())
+    bl = {c: v / z for c, v in bl.items()}
     bets = []
-    for c, p in sorted(P.items(), key=lambda x: -x[1]):
+    for c, p in sorted(bl.items(), key=lambda x: -x[1]):
         od = o.get(c)
         if od and p * od > THR and p >= MIN_P and od <= MAX_ODDS:
-            bets.append(dict(combo=c, p=round(p, 4), odds=od, ev=round(p * od, 2)))
+            bets.append(dict(combo=c, p=round(p, 4), p_claude=round(P[c], 4), odds=od, ev=round(p * od, 2)))
     top = sorted(P.items(), key=lambda x: -x[1])[:8]
     rec = dict(date=f"{today()}", venue=VENUES.get(jcd), jcd=jcd, rno=rno, made_at=f"{now():%H:%M}",
                p_win={str(i + 1): round(w, 3) for i, w in enumerate(win)},
