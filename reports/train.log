@@ -1,8 +1,8 @@
-races: 前半=8687 後半=8828
+races: 前半=8846 後半=9034
 blend(前半で推定): a(model)=0.121 b(market)=0.966
-  前半 3連単NLL: model=3.8309 market=3.6783 blend=3.6716
-  後半 3連単NLL: model=3.8133 market=3.6600 blend=3.6519
-  1着NLL(全期間): model=1.1624 market=1.1340
+  前半 3連単NLL: model=3.8304 market=3.6779 blend=3.6712
+  後半 3連単NLL: model=3.8112 market=3.6564 blend=3.6481
+  1着NLL(全期間): model=1.1618 market=1.1331
 thr max_odds | 前半 bets roi | 後半 bets roi CI95
 1.0 None |      6 0.000 |      3 17.700 [nan,nan]
 1.0  100 |      4 0.000 |      2 26.550 [nan,nan]
@@ -35,8 +35,8 @@ thr max_odds | 前半 bets roi | 後半 bets roi CI95
   0.5243741532877285,
   0.3832589739956006
  ],
- "a": 0.12093266013402117,
- "b": 0.9723462528739386,
+ "a": 0.11932547221658692,
+ "b": 0.9754983119061205,
  "thr": 999.0,
  "max_odds": null,
  "selected_on": {
@@ -49,7 +49,7 @@ thr max_odds | 前半 bets roi | 後半 bets roi CI95
  },
  "odds_period": [
   "2026-07-09",
-  "2026-11-05"
+  "2026-11-08"
  ],
- "trained_until": "2026-11-05"
+ "trained_until": "2026-11-08"
 }
